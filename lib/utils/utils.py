@@ -15,6 +15,7 @@ import torch.optim as optim
 
 import numpy as np
 
+from .mpilogger import MPILogHandler
 
 class FullModel(nn.Module):
     """
@@ -80,7 +81,7 @@ class AverageMeter(object):
         return self.avg
     
 
-def create_logger(cfg, cfg_name, phase='train'):
+def create_logger(cfg, cfg_name, phase='train', mpi=False):
     root_output_dir = Path(cfg.OUTPUT_DIR)
     # set up logger
     if not root_output_dir.exists():
@@ -99,11 +100,17 @@ def create_logger(cfg, cfg_name, phase='train'):
     time_str = time.strftime('%Y-%m-%d-%H-%M')
     log_file = '{}_{}_{}.log'.format(cfg_name, time_str, phase)
     final_log_file = final_output_dir / log_file
-    head = '%(asctime)-15s %(message)s'
-    logging.basicConfig(filename=str(final_log_file),
-                        format=head)
+    if mpi:
+        file_handler = MPILogHandler(str(final_log_file))
+        # Construct an MPI formatter which prints out the rank and size
+        mpifmt = logging.Formatter(fmt='[rank %(rank)s/%(size)s] %(asctime)s : %(message)s')
+        file_handler.setFormatter(mpifmt)
+    else:
+        file_handler = logging.FileHandler(str(final_log_file))
+        file_handler.setFormatter('%(asctime)-15s %(message)s')
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
+    logger.addHandler(file_handler)
     console = logging.StreamHandler()
     logging.getLogger('').addHandler(console)
 

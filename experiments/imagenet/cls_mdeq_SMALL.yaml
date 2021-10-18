@@ -48,9 +48,10 @@ CUDNN:
 DATASET:
   DATASET: 'imagenet'
   DATA_FORMAT: 'jpg'
-  ROOT: 'data/imagenet/'
+  ROOT: 'datasets/imagenet/ILSVRC/Data/CLS-LOC'
   TEST_SET: 'val'
   TRAIN_SET: 'train'
+  VIZ_SET: 'train'
 TEST:
   BATCH_SIZE_PER_GPU: 32
   MODEL_FILE: ''

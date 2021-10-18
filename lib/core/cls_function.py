@@ -90,6 +90,7 @@ def train(config, train_loader, model, criterion, optimizer, lr_scheduler, epoch
 def validate(config, val_loader, model, criterion, lr_scheduler, epoch, output_dir, tb_log_dir,
              writer_dict=None, topk=(1,5)):
     batch_time = AverageMeter()
+    fetch_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
@@ -100,6 +101,8 @@ def validate(config, val_loader, model, criterion, lr_scheduler, epoch, output_d
     with torch.no_grad():
         end = time.time()
         for i, (input, target) in enumerate(val_loader):
+            # input, target = input.to(device), target.to(device)
+            fetch_time.update(time.time() - end)
             # compute output
             output = model(input, 
                            train_step=-1,       # Evaluate using MDEQ (even when pre-training)
@@ -117,14 +120,16 @@ def validate(config, val_loader, model, criterion, lr_scheduler, epoch, output_d
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
+            if i >= 1: break
             
         msg = 'Test: Time {batch_time.avg:.3f}\t' \
+              'Fetch time {fetch_time.avg:.3f}\t' \
               'Loss {loss.avg:.4f}\t' \
               'Error@1 {error1:.3f}\t' \
               'Error@5 {error5:.3f}\t' \
               'Accuracy@1 {top1.avg:.3f}\t' \
               'Accuracy@5 {top5.avg:.3f}\t'.format(
-                  batch_time=batch_time, loss=losses, top1=top1, top5=top5,
+                  batch_time=batch_time, fetch_time=fetch_time, loss=losses, top1=top1, top5=top5,
                   error1=100-top1.avg, error5=100-top5.avg)
         logger.info(msg)
 
@@ -134,8 +139,7 @@ def validate(config, val_loader, model, criterion, lr_scheduler, epoch, output_d
             writer.add_scalar('valid_loss', losses.avg, global_steps)
             writer.add_scalar('valid_top1', top1.avg, global_steps)
             writer_dict['valid_global_steps'] = global_steps + 1
-
-    return top1.avg
+    return losses.avg, 1 - top1.avg / 100, 1 - top5.avg / 100
 
 
 class AverageMeter(object):

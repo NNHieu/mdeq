@@ -8,7 +8,7 @@ from warnings import resetwarnings
 from torch._C import device
 
 from torch.functional import Tensor
-from utils import read_list, write_list
+from .utils import read_list, write_list
 import h5py
 
 import torch.distributed as dist
@@ -20,8 +20,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import time
 from functools import partial
-
-import pytorch_lightning as pl
+from utils import mpi4pytorch as mpi
 
 def get_weights_as_list(net):
     """ Extract parameters from net, and return a list of tensors"""
@@ -201,8 +200,9 @@ class Surface:
         self.h5_file = None
         self.layers = layers
 
-    def add_layer(self, name, value=-1):
-        self.layers[name] = np.ones(self.shape)*value
+    def add_layer(self, *names, value=-1):
+        for name in names:
+            self.layers[name] = np.ones(self.shape)*value
 
     def mesh(self):
         return np.meshgrid(self.xcoord, self.ycoord)
@@ -271,12 +271,13 @@ class Surface:
         self.h5_file.close()
 
 class Sampler:
-    def __init__(self, model, surface, layer_names, device, rank=-1) -> None:
+    def __init__(self, model, surface, layer_names, device, comm=None, rank=-1) -> None:
         self.model = model
         self.surface = surface
         self.rank = rank
         self.device = device
         self.layer_names = layer_names
+        self.comm = comm
     
     def prepair(self):
         # if rank == 0: self.surface.open('r+')
@@ -285,18 +286,19 @@ class Sampler:
         # The coordinates of each unfilled index (with respect to the direction vectors
         # stored in 'd') are stored in 'coords'.
         # inds, coords, inds_nums = scheduler.get_job_indices(*surface.get_unplotted_indices(loss_key), rank, size)
-        self.layers_ts = [torch.tensor(self.surface.layers[name], device=self.device) for name in self.layer_names]
-        self.layers_fl_ts = [torch.ravel(layer) for layer in self.layers_ts]
+        self.layers = [self.surface.layers[name] for name in self.layer_names]
+        self.layers_fl = [layer.ravel() for layer in self.layers]
         model = self.model
         model.eval()
-        model.to(self.device)
+        # model.to(self.device)
     
     def reduce(self):
         # Send updated plot data to the master node
         if self.rank < 0: return 0
         syc_start = time.time()
-        for layer in self.layers_fl_ts:
-            dist.reduce(layer, 0, op=dist.ReduceOp.MAX)
+        for layer in self.layers_fl:
+            # dist.reduce(layer, 0, op=dist.ReduceOp.MAX)
+            mpi.reduce_max(self.comm, layer)
         syc_time = time.time() - syc_start
         return syc_time
         
@@ -304,8 +306,8 @@ class Sampler:
     def write(self):
         # Only the master node writes to the file - this avoids write conflicts
         if self.rank <= 0:
-            for name, layer in zip(self.layer_names, self.layers_ts):
-                self.surface.h5_file['layers'][name][:] = layer.cpu().numpy()
+            for name, layer in zip(self.layer_names, self.layers):
+                self.surface.h5_file['layers'][name][:] = layer
             self.surface.flush()
 
     def run(self, evaluation, inds, coords, inds_nums):
@@ -331,7 +333,7 @@ class Sampler:
                 loss_compute_time = time.time() - loss_start
                 # Record the result in the local array
                 for i, val in enumerate(values):
-                    self.layers_fl_ts[i][ind] = val
+                    self.layers_fl[i][ind] = val
 
                 syc_time = self.reduce()
                 total_sync += syc_time
