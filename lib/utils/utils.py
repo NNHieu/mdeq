@@ -15,7 +15,6 @@ import torch.optim as optim
 
 import numpy as np
 
-from .mpilogger import MPILogHandler
 
 class FullModel(nn.Module):
     """
@@ -101,13 +100,15 @@ def create_logger(cfg, cfg_name, phase='train', mpi=False):
     log_file = '{}_{}_{}.log'.format(cfg_name, time_str, phase)
     final_log_file = final_output_dir / log_file
     if mpi:
+        from .mpilogger import MPILogHandler
         file_handler = MPILogHandler(str(final_log_file))
         # Construct an MPI formatter which prints out the rank and size
         mpifmt = logging.Formatter(fmt='[rank %(rank)s/%(size)s] %(asctime)s : %(message)s')
         file_handler.setFormatter(mpifmt)
     else:
         file_handler = logging.FileHandler(str(final_log_file))
-        file_handler.setFormatter('%(asctime)-15s %(message)s')
+        fmt = logging.Formatter(fmt='%(asctime)-15s %(message)s')
+        file_handler.setFormatter(fmt)
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     logger.addHandler(file_handler)

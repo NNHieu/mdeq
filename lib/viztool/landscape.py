@@ -11,12 +11,10 @@ from torch.functional import Tensor
 from .utils import read_list, write_list
 import h5py
 
-import torch.distributed as dist
+# import torch.distributed as dist
 
 import numpy as np
 from . import projection as proj, scheduler
-
-import torch.distributed as dist
 import torch.multiprocessing as mp
 import time
 from functools import partial
@@ -124,16 +122,17 @@ class Direction:
             if len(directions) == 2:
                 dx = directions[0]
                 dy = directions[1]
-                # print(dx)
-                # print(len(dx), len(dy))
+                # self.logger.info(dx)
+                # self.logger.info(len(dx), len(dy))
                 changes = [d0*step[0] + d1*step[1] for (d0, d1) in zip(dx, dy)]
             else:
                 changes = [d*step for d in directions[0]]
-            # print('change norm', torch.norm(proj.tensorlist_to_tensor(changes)))
-            # print(torch.norm(proj.tensorlist_to_tensor(changes)))
+            # self.logger.info('change norm', torch.norm(proj.tensorlist_to_tensor(changes)))
+            # self.logger.info(torch.norm(proj.tensorlist_to_tensor(changes)))
 
             for (p, w, d) in zip(net.parameters(), weights, changes):
-                p.copy_(w + d)
+                s = w + d.to(w.device)
+                p.data = s
             
     @staticmethod
     def save(direction, h5_file, name):
@@ -207,8 +206,8 @@ class Surface:
     def mesh(self):
         return np.meshgrid(self.xcoord, self.ycoord)
 
-    def save(self):
-        f = h5py.File(self.path, 'w-') # Create file, fail if exists
+    def save(self, mode='w-'):
+        f = h5py.File(self.path, mode) # Create file, fail if exists
         f.attrs['dir_path'] = self.dir_path
         f['xcoord'] = self.xcoord 
         f['ycoord'] = self.xcoord
@@ -271,17 +270,18 @@ class Surface:
         self.h5_file.close()
 
 class Sampler:
-    def __init__(self, model, surface, layer_names, device, comm=None, rank=-1) -> None:
+    def __init__(self, model, surface, layer_names, device, comm=None, rank=-1, logger=None) -> None:
         self.model = model
         self.surface = surface
         self.rank = rank
         self.device = device
         self.layer_names = layer_names
         self.comm = comm
-    
+        self.logger = logger
+
     def prepair(self):
         # if rank == 0: self.surface.open('r+')
-        self.surface.dirs.to_tensor(device=self.device)
+        self.surface.dirs.to_tensor()
         # Generate a list of indices of 'losses' that need to be filled in.
         # The coordinates of each unfilled index (with respect to the direction vectors
         # stored in 'd') are stored in 'coords'.
@@ -316,7 +316,7 @@ class Sampler:
             using MPI reduce.
         """
         # dirs_tensor = (proj.tensorlist_to_tensor(directions[0]), proj.tensorlist_to_tensor(directions[1]))
-        print('Computing %d values for rank %d'% (len(inds), self.rank))
+        self.logger.info('Computing %d values for rank %d'% (len(inds), self.rank))
         start_time = time.time()
         total_sync = 0.0
         with torch.no_grad():
@@ -339,8 +339,8 @@ class Sampler:
                 total_sync += syc_time
                 self.write()
 
-                log_values = '\t'.join(['{}={:.3f}'.format(name, val.item()) for name, val in zip(self.layer_names, values)])
-                print('Evaluating rank %d  %d/%d  (%.1f%%)  coord=%s \t%s \ttime=%.2f \tsync=%.2f' % (
+                log_values = '\t'.join(['{}={:.3f}'.format(name, val) for name, val in zip(self.layer_names, values)])
+                self.logger.info('Evaluating rank %d  %d/%d  (%.1f%%)  coord=%s \t%s \ttime=%.2f \tsync=%.2f' % (
                         self.rank, count, len(inds), 100.0 * count/len(inds), str(coord), log_values, loss_compute_time, syc_time))
 
             # This is only needed to make MPI run smoothly. If this process has less work than
@@ -349,7 +349,7 @@ class Sampler:
                 self.reduce()
 
         total_time = time.time() - start_time
-        print('Rank %d done!  Total time: %.2f Sync: %.2f' % (self.rank, total_time, total_sync))
+        self.logger.info('Rank %d done!  Total time: %.2f Sync: %.2f' % (self.rank, total_time, total_sync))
     
 # def main():
 #     model = None

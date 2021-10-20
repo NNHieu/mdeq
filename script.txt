@@ -1,0 +1,9 @@
+python tools/tmp.py
+python tools/plot_2D.py -f output/imagenet/cls_mdeq_SMALL/surf_[-0.2,0.2,40]x[-0.2,0.2,40].h5 --surf_name loss
+python tools/plot_2D.py -f output/o/imagenet/cls_mdeq_SMALL/surf_[-0.2,0.2,40]x[-0.2,0.2,40].h5 --surf_name loss
+
+python tools/cls_viz.py --testModel pretrained_models/MDEQ_Small_Cls.pkl --cfg experiments/imagenet/cls_mdeq_SMALL.yaml --rect -1 -1 1 1 --resolution 40 40 --rank 0
+python tools/cls_viz.py --testModel pretrained_models/MDEQ_Small_Cls.pkl --cfg experiments/imagenet/cls_mdeq_SMALL.yaml --modelDir output/o --rect -1 -1 1 1 --resolution 40 40 --rank 1
+
+python tools/cls_viz.py --testModel pretrained_models/MDEQ_Small_Cls.pkl --cfg experiments/imagenet/cls_mdeq_SMALL.yaml --rect -0.2 -0.2 0.2 0.2 --resolution 40 40 --rank 0
+python tools/cls_viz.py --testModel pretrained_models/MDEQ_Small_Cls.pkl --cfg experiments/imagenet/cls_mdeq_SMALL.yaml --modelDir output/o --rect -0.2 -0.2 0.2 0.2 --resolution 40 40 --rank 1

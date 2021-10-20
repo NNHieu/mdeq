@@ -88,7 +88,7 @@ def train(config, train_loader, model, criterion, optimizer, lr_scheduler, epoch
 
 
 def validate(config, val_loader, model, criterion, lr_scheduler, epoch, output_dir, tb_log_dir,
-             writer_dict=None, topk=(1,5)):
+             writer_dict=None, topk=(1,5), device=None):
     batch_time = AverageMeter()
     fetch_time = AverageMeter()
     losses = AverageMeter()
@@ -101,7 +101,8 @@ def validate(config, val_loader, model, criterion, lr_scheduler, epoch, output_d
     with torch.no_grad():
         end = time.time()
         for i, (input, target) in enumerate(val_loader):
-            # input, target = input.to(device), target.to(device)
+            if device is not None:
+                input, target = input.to(device), target.to(device)
             fetch_time.update(time.time() - end)
             # compute output
             output = model(input, 
@@ -120,7 +121,7 @@ def validate(config, val_loader, model, criterion, lr_scheduler, epoch, output_d
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
-            if i >= 1: break
+            if i >= 32: break
             
         msg = 'Test: Time {batch_time.avg:.3f}\t' \
               'Fetch time {fetch_time.avg:.3f}\t' \
